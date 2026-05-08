@@ -1,0 +1,65 @@
+import * as d3 from 'd3';
+import { NodeData } from '../types';
+
+
+//the .filter is the main culprit for the performance drop, we can optimize it by precomputing a set of highlighted node ids and checking membership instead of filtering the entire selection
+export function createNodeLayer(
+  g: d3.Selection<SVGGElement, unknown, null, undefined>,
+  nodes: NodeData[],
+  getNodeColor: (id: string) => string,
+  getColorIndex: (id: string) => number,
+  NODE_R: number
+) {
+  const nodeGroup = g.append('g')
+    .selectAll<SVGGElement, NodeData>('g')
+    .data(nodes)
+    .enter()
+    .append('g')
+    .attr('class', 'node')
+    .style('cursor', 'pointer');
+
+  // ring
+  nodeGroup.append('circle')
+    .attr('class', 'ring')
+    .attr('r', NODE_R + 5)
+    .attr('fill', 'none')
+    .attr('stroke', d => getNodeColor(d.id))
+    .attr('stroke-width', 1.5)
+    .attr('stroke-opacity', 0);
+
+  // main
+  nodeGroup.append('circle')
+    .attr('class', 'main-circle')
+    .attr('r', NODE_R)
+    .attr('fill', '#000')
+    .attr('stroke', d => getNodeColor(d.id))
+    .attr('stroke-width', 6)
+    //.attr('filter', d => `url(#glow-${getColorIndex(d.id)})`);
+    //this line alone causes a huge performance drop, so we move the glow effect to the defs and apply it as a fill to an overlay circle instead
+    
+
+  // overlay
+  nodeGroup.append('circle')
+    .attr('class', 'overlay-circle')
+    .attr('r', NODE_R)
+    .attr('fill', d => `url(#nodeOverlay-${getColorIndex(d.id)})`)
+    .attr('pointer-events', 'none');
+
+  // label
+  nodeGroup.append('text')
+    /*.text((d) => {
+      const id = d.id;
+      if (!id) return '';
+      if (id.startsWith('0x') && id.length > 12)
+        return `${id.slice(0, 6)}...${id.slice(-4)}`;
+      return id.length > 14 ? `${id.slice(0, 10)}...` : id;
+    })*/
+    .attr('text-anchor', 'middle')
+    .attr('dy', `${NODE_R + 14}px`)
+    .attr('fill', 'rgba(200,215,255,0.7)')
+    .attr('font-size', '10px')
+    .attr('font-family', 'ui-monospace, monospace')
+    .attr('pointer-events', 'none');
+
+  return nodeGroup;
+}

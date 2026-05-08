@@ -1,0 +1,81 @@
+ok so i am building a small full stack project for my bachelor thesis , a graph + behvior clustering based pipeline for blockchain analysis that has 2 usecases for now but i will expand later. for now just sybil wallets verification and rug pull detection.
+
+my rough architecture design is like below, but i think i need to adjust it a lot too, help me with it. i need a beter and clearer , reusable , elegant folder structure, no need for too complete one, cuz  i build prototype with it. No need to also gimme python code for now. i will tell u when to startbuilding
+
+
+
+each usecase, take different inputs, so make sure to isolate them.
+but both take a csv file for now , each use case might only need some col that the other use case not. also, both take token_contract , the rug pull project also take in addition launchdate and end date.
+
+
+
+so both use case share a few same core functions:
+-they share same funder graph, like given a csv file, with addresses , is_cex (which is a bool) , is_contract (also bool) , and the holding_share_percentage sth like this 
+-then a funder graph is constructed: first take the given address set , is contract is cex etc, percentage of 
+first clean data, cleanup , it cleans the rows that have share percentage less than 0.001 or 0.1%  for exampple , then filter out all rows with contract is true. 
+we now have a set of valid wallet addresses. . even if those cols dont exist its no problem
+the csv has fields:
+address	cluster_id	historic_tranfers_in	historic_tranfers_out	is_contract	is_exchange	is_visible	name	supply_percentage	token_amount	type
+
+
+then the alchemy api is used to constuct nodes for given nodes (each node has all required info about the node , in this case its better to use separate files) , each node isa bit like object or u can use dict, it consists of address, behavior vector (behv vector has like for example first fund time, first time amount, and total tx) , action sequence: (like u get thetx histories of a wallet from alchemy using getassettransfer, then u chain up the method ids executed in order: eg  0x (meaning receive fund , type oftransfer) -> 0xe524 (sample method id 1) -> ... and so on, last attribute is its direct funder, namely the from address (the first ever address who sends fund to the person
+
+after consturcting the nodes, do the node expansion: namely the backtracking by its first direct funder . it keeps backtrack (using dfs) for each given wallet and expand the total node set (remember its a set, so overlapping value is not problem), until it hits a node thats is_cex true . we do it until we get a few different independent connected components linked by first funder. each node has the given info. then using the "from" of each node, we can construct the edges. eventually get a whole funder graph.  remember when u calculate the action sequence, and behavior vector u create seprate files so it is not in the graph construct file , but just calling the required function to keeep this file clean. it might be also better if u create a file , construct node , which calls the action sequence constructor and behvior vector constructor, and also add the from field. then the funder graph construct again calls the node construct, this keeps it clean.
+
+-later we caluclate the pariwise similarity between two wallets using my predefined similarity function. my total similarity contains two parts,  behavior vector similarity and action sequence similarity. the similarity is just min (1,, min / max of that feature) , except for the time feature :stime(i, j) = １(if if |ti − tj | ≤ 5 minute , else use exp (- |ti-tj) -5 / lambda) , where in this case lambda is 2.2, which ensures that: •	Wallets funded within 5 minutes are treated as identical (stime = 1)
+•	Similarity decays smoothly afterward
+•	After approximately 15 minutes, similarity approaches 0
+This reflects the intuition that Sybil wallets are typically funded within short time intervals, 
+the overal similarity is S(i, j) = α · Saction sequence similarity(i, j) + (1 − α) · Sbeh(i, j) 
+
+then using similarity function, the dbscan groups within each ICC, and find different subgroups within each ICC that share very similar overal similarity. 
+
+actually the pariwise similarity function , the node dict format are the same across current 2 usecases , except the rug pull one has one extra supply supply_percentage attribute (this is calculated dynamically too) dbscan is also shared for both usecases , just different params and distance matrix
+
+
+Raw CSV → Clean Dataset → Node Builder → Graph Builder → Similarity Engine → Clustering Engine → UseCase Layer
+
+backend/
+│
+├── main.py
+├── api/
+│   └── router.py
+│
+├── core/
+│
+│   ├── preprocessing/
+│   │   ├── input_csv_cleaner.py
+│   │   └── exchange_wallet_extractor.py
+│
+│   ├── data_source/
+│   │   └── alchemy_client.py
+│
+│   ├── nodes/
+│   │   ├── behavior.py
+│   │   ├── action_sequence.py
+│   │   ├── node_builder.py
+│   │   └── funder_resolver.py
+│
+│   ├── graph/
+│   │   ├── funder_expansion.py   # DFS + CEX stopping
+│   │   └── graph_builder.py      # builds edges AFTER nodes exist
+│
+│   ├── similarity/
+│   │   └── overall_similarity.py         # unified function (behavior + action)
+ |	    └── behavior_vector_similarity.py
+ |          └── action_sequence_similarity.py
+ |
+│
+│   ├── clustering/
+│   │   └── dbscan.py
+│
+│   └── ICC/             # (NEW) connected components splitter
+│   │   └──ICC_splitter.py
+│
+│
+├── usecases/
+│   ├── sybil.py
+│   └── rugpull.py
+│       
+│
+└── requirements.txt

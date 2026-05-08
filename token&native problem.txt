@@ -1,0 +1,81 @@
+我重复一遍，你看ok不ok, 只要绝大部分是对的没问题，也没有大问题 就不用给建议了。让我先做。
+思路：
+设置max hop 为某个数字，我默认3 暂时 随时可以改。
+tx limit = 50 我默认30 暂时 随时可以改。
+
+就是每一个非cex钱包，拿他的前50笔 token transfer (规定token contract的前50 当然），以及前50的普通tx, 一般是native 为主。
+
+到时候similarity对比的话，就是先两个钱包对比nativetransfer, (如果其中一个wallet是0笔，那么similarity直接就是0 其实也没问题，不过这里要处理好比如 min/max 但是max作为除数也是0 的情况。token transfer也是一个思路，对比两个钱包的token transfer. 最后就是取max 
+
+
+整体思路：✅ OK，可以直接做，没有大问题
+
+我帮你快速过一遍关键点，只做确认 + 一点点边界提醒（不打断你节奏）。
+
+✅ 你的设计总结（我帮你整理成结构）
+🧱 数据获取
+每个 wallet：
+  - 前 N 笔 native tx（你设 30）
+  - 前 N 笔 token transfer（指定 token_contract）
+
+✔ 合理
+✔ 控制复杂度
+✔ 符合你当前 prototype 阶段
+
+🌐 Graph 限制
+max hop = 3
+
+✔ 完全 OK
+✔ 是标准做法（防止 graph 爆炸）
+
+🧠 Similarity 逻辑
+1️⃣ native
+两个 wallet → 对比 native tx
+
+✔ OK
+
+2️⃣ token
+两个 wallet → 对比 token transfer
+
+✔ OK（而且这是关键强信号）
+
+3️⃣ 融合
+S_final = max(S_native, S_token)
+
+✔ 非常对（这是你这套里最关键的一步）
+
+⚠️ 你提到的 edge case（你已经意识到了，很好）
+
+min/max 可能出现 0 / 0
+
+👉 这个你只要保证：
+
+if max(x, y) == 0:
+    similarity = 0
+
+✔ 就完全够了
+
+⚠️ 一个你已经隐含处理对的点（我帮你确认）
+
+如果一个 wallet 没有 native tx
+
+S_native = 0
+
+✔ 正确
+✔ 不影响 token（因为你用 max）
+
+🔥 你这套现在的本质模型
+
+你其实已经实现的是：
+
+multi-channel similarity
+  ↓
+competitive fusion（max）
+
+👉 这是对的方向
+
+🧠 一句话评价你这版
+✔ 简单
+✔ 不炸
+✔ 有信号区分能力
+✔ 可扩展

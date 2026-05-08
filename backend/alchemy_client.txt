@@ -1,0 +1,219 @@
+import requests
+import csv
+import os
+from datetime import datetime
+
+# =========================
+# CONFIG
+# =========================
+CHAIN = "base"
+LIMIT = 50
+API_KEY = "MVoVpT6qMNlUJciBeaf1C"
+
+CHAIN_CONFIG = {
+    "base": f"https://base-mainnet.g.alchemy.com/v2/{API_KEY}",
+    "eth": f"https://eth-mainnet.g.alchemy.com/v2/{API_KEY}",
+    "bnb": f"https://bnb-mainnet.g.alchemy.com/v2/{API_KEY}"
+}
+
+URL = CHAIN_CONFIG[CHAIN]
+OUTPUT_FILE = "event_log.csv"
+
+
+# =========================
+# RPC CALL
+# =========================
+def rpc_call(method, params):
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params
+    }
+
+    try:
+        r = requests.post(URL, json=payload, timeout=10)
+        return r.json().get("result")
+    except:
+        return None
+
+
+# =========================
+# DATE PARSER
+# =========================
+def parse_date(date_str):
+    if not date_str:
+        return None
+    return int(datetime.strptime(date_str, "%Y-%m-%d").timestamp())
+
+
+# =========================
+# RAW TX FETCH
+# =========================
+def get_raw_tx(tx_hash):
+    return rpc_call("eth_getTransactionByHash", [tx_hash])
+
+
+# =========================
+# METHOD ID
+# =========================
+def extract_method_id_from_raw_tx(raw_tx):
+    if not raw_tx:
+        return "unknown"
+
+    input_data = raw_tx.get("input", "")
+
+    if not input_data or input_data == "0x":
+        return "0x"
+
+    if not input_data.startswith("0x"):
+        input_data = "0x" + input_data
+
+    return input_data[:10].lower()
+
+
+# =========================
+# BLOCK TIME
+# =========================
+def get_block_time(block_hex):
+    block = rpc_call("eth_getBlockByNumber", [block_hex, False])
+    if not block:
+        return None
+    return int(block["timestamp"], 16)
+
+
+# =========================
+# NORMALIZE TX
+# =========================
+def normalize(tx, wallet):
+
+    tx_hash = tx.get("hash")
+
+    raw_tx = get_raw_tx(tx_hash)
+    method_id = extract_method_id_from_raw_tx(raw_tx)
+
+    from_addr = (tx.get("from") or "").lower()
+    to_addr = (tx.get("to") or "").lower()
+    wallet_l = wallet.lower()
+
+    if from_addr == wallet_l:
+        direction = "out"
+    elif to_addr == wallet_l:
+        direction = "in"
+    else:
+        direction = "unknown"
+
+    value = tx.get("value")
+    value = float(value) if value is not None else 0.0
+
+    block = tx.get("blockNum") or tx.get("blockNumber")
+
+    return {
+        "wallet": wallet,
+        "from_address": tx.get("from"),
+        "to_address": tx.get("to"),
+        "hash": tx_hash,
+        "block": block,
+        "timestamp": get_block_time(block),
+        "tx_type": tx.get("category"),
+        "method_id": method_id,
+        "direction": direction,
+        "asset": tx.get("asset"),
+        "amount": max(value, 0.0),
+        "token_amount": (tx.get("rawContract") or {}).get("value") or 0,
+        "chain": CHAIN
+    }
+
+
+# =========================
+# FETCH WALLET
+# =========================
+def fetch_wallet(wallet, token_contract, start_date=None, end_date=None):
+
+    start_ts = parse_date(start_date)
+    end_ts = parse_date(end_date)
+
+    def build_payload(addr_key):
+        return {
+            addr_key: wallet,
+            "fromBlock": "0x0",
+            "toBlock": "latest",
+            "category": ["external", "erc20"],
+            "contractAddresses": [token_contract],
+            "maxCount": hex(LIMIT),
+            "withMetadata": False
+        }
+
+    out = rpc_call("alchemy_getAssetTransfers", [build_payload("fromAddress")])
+    out = out.get("transfers", []) if out else []
+
+    inn = rpc_call("alchemy_getAssetTransfers", [build_payload("toAddress")])
+    inn = inn.get("transfers", []) if inn else []
+
+    merged = {}
+    for t in (out + inn):
+        if t and t.get("hash"):
+            merged[t["hash"]] = t
+
+    # =========================
+    # NORMALIZE
+    # =========================
+    rows = [normalize(t, wallet) for t in merged.values()]
+
+    # =========================
+    # SORT BY TIME
+    # =========================
+    rows = sorted(
+        rows,
+        key=lambda x: x["timestamp"] if x["timestamp"] is not None else 0
+    )
+
+    # =========================
+    # TIME FILTER (LOCAL - CORRECT APPROACH)
+    # =========================
+    if start_ts is not None:
+        rows = [r for r in rows if r["timestamp"] and r["timestamp"] >= start_ts]
+
+    if end_ts is not None:
+        rows = [r for r in rows if r["timestamp"] and r["timestamp"] <= end_ts]
+
+    return rows
+
+
+# =========================
+# WRITE CSV
+# =========================
+def write_rows(rows):
+
+    if not rows:
+        return
+
+    file_exists = os.path.exists(OUTPUT_FILE)
+
+    with open(OUTPUT_FILE, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+
+        if not file_exists:
+            writer.writeheader()
+
+        writer.writerows(rows)
+
+
+# =========================
+# ENTRY POINT USED BY ORCHESTRATOR
+# =========================
+def process_wallets(cleaned_rows, token_contract, start_date=None, end_date=None):
+
+    # extract unique wallets
+    addresses = list({
+        r.get("address", "").strip().lower()
+        for r in cleaned_rows
+        if r.get("address")
+    })
+
+    for wallet in addresses:
+        try:
+            txs = fetch_wallet(wallet, token_contract, start_date, end_date)
+            write_rows(txs)
+        except Exception as e:
+            print(f"[Alchemy Error] {wallet}: {e}")

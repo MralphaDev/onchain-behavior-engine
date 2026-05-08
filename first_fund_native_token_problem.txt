@@ -1,0 +1,355 @@
+还有个问题first fund amount ,到底用哪个啊？用native的还是token的？
+但是如果有些根本没有first native fund呢 有些有
+
+如果是none我到时候similarity怎么计算
+
+这个情况是**完全正常的**，而且你的系统设计已经可以很好处理，不需要额外复杂化。
+
+我直接给你一个**简单且正确的处理方式**👇
+
+---
+
+# ✅ 结论（直接用）
+
+> 有就用
+> 没有就设为 `None`
+> 不要强行补
+
+---
+
+# 🧠 Node 里就这样存
+
+```python
+node = {
+    "first_native_time": ... or None,
+    "first_native_amount": ... or None,
+
+    "first_token_time": ... or None,
+    "first_token_amount": ... or None,
+}
+```
+
+---
+
+# 🧠 为什么这是对的
+
+你现在面对的是两类钱包：
+
+## 🟢 类型 A（正常 funded）
+
+```text
+先收到 native → 再操作 → 收 token
+```
+
+---
+
+## 🔵 类型 B（直接被喂 token / bot）
+
+```text
+❌ 没有 native
+直接收到 token
+```
+
+👉 这种在：
+
+* airdrop
+* bot farm
+* rugpull distribution
+
+👉 非常常见，而且是**强信号**
+
+---
+
+# ❗关键点（你不用担心）
+
+> “没有 native 怎么比较？”
+
+👉 答案是：
+
+```text
+不比较 native，就比较 token
+```
+
+---
+
+# 🔥 你的 similarity 已经天然解决了
+
+你之前设计：
+
+```python
+S_final = max(S_native, S_token)
+```
+
+👉 自动处理所有情况：
+
+---
+
+## 情况 1
+
+```text
+两个都有 native
+→ 用 native
+```
+
+---
+
+## 情况 2
+
+```text
+两个都没有 native
+→ S_native = 0
+→ 用 token
+```
+
+---
+
+## 情况 3（你担心的）
+
+```text
+A 有 native
+B 没有 native
+```
+
+👉 结果：
+
+```text
+S_native = 0
+S_token = ?（可能很高）
+S_final = token
+```
+
+✔ 完全合理
+
+---
+
+# ⚠️ 唯一你要注意的点
+
+不要写这种逻辑：
+
+```python
+if not native:
+    similarity = 0  ❌
+```
+
+👉 这样会直接把 token 信号杀掉
+
+---
+
+# ✅ 正确写法（你现在就可以用）
+
+```python
+S_native = compute_native(...) if both_have_native else 0
+S_token  = compute_token(...) if both_have_token else 0
+
+S_final = max(S_native, S_token)
+```
+
+---
+
+# 🧠 一句话理解
+
+```text
+缺失 ≠ 错误
+只是这个维度没有信息
+```
+
+---
+
+# 🔥 更本质一点（你已经在做高级东西了）
+
+你现在其实在做：
+
+> 🧠 **sparse multi-signal modeling（稀疏多信号建模）**
+
+---
+
+# 🚀 结论
+
+```text
+✔ 有 native → 用
+✔ 没 native → 忽略
+✔ token 补充信号
+✔ max 做融合
+```
+
+👉 ✔ 完整闭环
+👉 ✔ 不需要再改
+
+---
+
+# 👉 下一步
+
+你已经把：
+
+* 数据结构
+* 信号逻辑
+* edge case
+
+全部想通了
+
+👉 可以直接进入：
+
+**node builder 实现 + similarity 实现**
+
+---
+
+等你写到那里卡住，我帮你补关键点就行 🚀
+
+
+-----------
+很好，这个问题其实非常简单处理，而且你现在的设计已经完全兼容。
+
+我直接给你**最干净的规则**👇
+
+---
+
+# ✅ 核心规则（直接用）
+
+> ❌ 不要对 `None` 做计算
+> ✅ 把它当成 **“没有这个信号” → similarity = 0**
+
+---
+
+# 🧠 具体写法（你直接照这个做）
+
+## 👉 native
+
+```python
+def compute_native_similarity(n1, n2):
+    if n1["first_native_time"] is None or n2["first_native_time"] is None:
+        return 0
+
+    # 正常计算（时间 + amount）
+    ...
+```
+
+---
+
+## 👉 token
+
+```python
+def compute_token_similarity(n1, n2):
+    if n1["first_token_time"] is None or n2["first_token_time"] is None:
+        return 0
+
+    ...
+```
+
+---
+
+## 👉 最终
+
+```python
+S_native = compute_native_similarity(n1, n2)
+S_token  = compute_token_similarity(n1, n2)
+
+S_final = max(S_native, S_token)
+```
+
+---
+
+# 🧠 为什么这样是对的
+
+`None` 的意思是：
+
+```text
+这个维度没有信息
+```
+
+👉 不是：
+
+```text
+不相似
+```
+
+👉 只是：
+
+```text
+不能用这个维度判断
+```
+
+---
+
+# 🔥 举个你刚刚的例子
+
+## 情况
+
+```text
+A:
+  native ✔
+  token ✔
+
+B:
+  native ❌ (None)
+  token ✔
+```
+
+---
+
+## 计算
+
+```python
+S_native = 0  # 因为 B 没有 native
+S_token  = 1  # 完全同步
+
+S_final = 1
+```
+
+✔ 完全符合直觉
+
+---
+
+# ⚠️ 一个你要避免的错误
+
+不要写这种：
+
+```python
+if n1["first_native_time"] is None or n2["first_native_time"] is None:
+    return None  ❌
+```
+
+👉 会让后面 DBSCAN / matrix 全炸
+
+---
+
+# ✅ 标准做法（你现在就用）
+
+```python
+None → similarity = 0
+```
+
+---
+
+# 🧠 一句话总结
+
+```text
+None = 没信息，不参与 → 给0
+```
+
+---
+
+# 🚀 你现在已经完全闭环了
+
+你已经解决：
+
+* ✔ multi-signal（native + token）
+* ✔ missing data（None）
+* ✔ fusion（max）
+
+👉 这已经是一个**可以跑 clustering 的系统**
+
+---
+
+# 👉 下一步
+
+你可以直接进入：
+
+## 🔥 similarity matrix + DBSCAN
+
+或者：
+
+## 🔥 node builder 实现
+
+---
+
+等你写到 matrix 或 clustering 卡住，我帮你补关键点 🚀
