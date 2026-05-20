@@ -4,14 +4,30 @@ import os
 from datetime import datetime
 import json
 
-TX_CACHE_FILE = "tx_cache.json"
-BLOCK_CACHE_FILE = "block_cache.json"
+
 
 # =========================
 # CONFIG
 # =========================
 CHAIN = "bsc"
 LIMIT = 5  # Alchemy API max limit per request
+
+#brett
+#0x532f27101965dd16442E59d40670FaF5eBB142E4
+
+#myx
+#0xD82544bf0dfe8385eF8FA34D67e6e4940CC63e16
+
+# =========================
+# TX CACHE FILE
+# =========================
+TX_CACHE_FILE = "tx_cache.json"
+
+# =========================
+# BLOCK CACHE FILE
+# =========================
+BLOCK_CACHE_FILE = "block_cache.json"
+
 
 API_KEY = "MVoVpT6qMNlUJciBeaf1C"
 
