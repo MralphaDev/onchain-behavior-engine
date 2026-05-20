@@ -9,7 +9,7 @@ import json
 # =========================
 # CONFIG
 # =========================
-CHAIN = "bnb" # "base", "eth", "bnb"
+CHAIN = "base" # "base", "eth", "bnb"
 LIMIT = 5  # Alchemy API max limit per request
 
 #brett
