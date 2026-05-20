@@ -10,8 +10,9 @@ BLOCK_CACHE_FILE = "block_cache.json"
 # =========================
 # CONFIG
 # =========================
-CHAIN = "bnb"
-LIMIT = 5
+CHAIN = "bsc"
+LIMIT = 5  # Alchemy API max limit per request
+
 API_KEY = "MVoVpT6qMNlUJciBeaf1C"
 
 CHAIN_CONFIG = {
@@ -330,9 +331,9 @@ def load_existing_hashes():
 # =========================
 def process_wallets(cleaned_rows, token_contract, start_date=None, end_date=None):
 
-    load_cache()  # 🔥 NEW
-
-    existing_hashes = load_existing_hashes()  # 🔥 NEW
+    load_cache()  
+    
+    existing_hashes = load_existing_hashes() 
 
     addresses = list({
         r.get("address", "").strip().lower()
@@ -347,7 +348,7 @@ def process_wallets(cleaned_rows, token_contract, start_date=None, end_date=None
                 token_contract,
                 start_date,
                 end_date,
-                existing_hashes   # 🔥 NEW
+                existing_hashes   
             )
 
             write_rows(txs)
@@ -355,4 +356,4 @@ def process_wallets(cleaned_rows, token_contract, start_date=None, end_date=None
         except Exception as e:
             print(f"[Alchemy Error] {wallet}: {e}")
 
-    save_cache()  # 🔥 NEW
+    save_cache()  
